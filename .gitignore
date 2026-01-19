@@ -217,4 +217,9 @@ __marimo__/
 
 
 .DS_Store
-data/
+dataset/raw/
+dataset/processed/mel-spectrograms/
+*.pth
+# models/*/reports/
+runs/
+.optuna/
