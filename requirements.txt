@@ -4,3 +4,7 @@ numpy
 pandas
 tqdm
 scikit-learn
+seaborn
+matplotlib
+clearml
+optuna

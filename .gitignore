@@ -220,6 +220,5 @@ __marimo__/
 dataset/raw/
 dataset/processed/mel_spectrograms
 *.pth
-# models/*/reports/
 runs/
 .optuna/

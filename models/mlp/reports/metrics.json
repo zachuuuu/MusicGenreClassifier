@@ -1,0 +1,10 @@
+{
+    "test_loss": 1.0511444171269735,
+    "test_accuracy": 0.68,
+    "test_f1": 0.6711848252919249,
+    "test_precision": 0.679841751385869,
+    "test_recall": 0.68,
+    "training_time": 2.9288296699523926,
+    "epochs_trained": 25,
+    "best_val_loss": 0.6942231090863545
+}
