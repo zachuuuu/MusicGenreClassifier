@@ -23,7 +23,7 @@ MLP_CONFIG = {
     'input_size': 30,
     'hidden_sizes': [1024, 512, 256],
     'dropout': 0.536,
-    'optimizer': 'adam',
+    'optimizer': 'adamw',
     'learning_rate': 0.00685,
     'batch_size': 32,
     'epochs': 100,
@@ -33,13 +33,12 @@ MLP_CONFIG = {
 }
 
 CNN_CONFIG = {
-    'input_shape': (1, 128, 1292),
-    'in_channels': 1,
+    'input_shape': (128, 1292, 1),
     'num_classes': 10,
     'conv_channels': [32, 64, 128, 256],
     'fc_size': 512,
     'dropout': 0.496,
-    'optimizer': 'adam',
+    'optimizer': 'adamw',
     'learning_rate': 0.000153,
     'batch_size': 32,
     'epochs': 100,

@@ -1,4 +1,4 @@
-import torch
+import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,29 +7,27 @@ import json
 from pathlib import Path
 
 
-def evaluate_model(model, dataloader, criterion, device='cpu'):
-    model.eval()
-    model.to(device)
-
+def evaluate_model(model, dataloader, criterion):
     total_loss = 0.0
     all_preds = []
     all_labels = []
 
-    with torch.no_grad():
-        for inputs, labels in dataloader:
-            inputs, labels = inputs.to(device), labels.to(device)
+    num_samples = 0
 
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+    for inputs, labels in dataloader:
+        labels = tf.cast(labels, tf.int64)
+        outputs = model(inputs, training=False)
+        loss = criterion(labels, outputs)
 
-            total_loss += loss.item() * inputs.size(0)
+        total_loss += loss.numpy() * inputs.shape[0]
+        num_samples += inputs.shape[0]
 
-            _, predicted = torch.max(outputs, 1)
+        predicted = tf.argmax(outputs, axis=1).numpy()
 
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+        all_preds.extend(predicted)
+        all_labels.extend(labels.numpy())
 
-    avg_loss = total_loss / len(dataloader.dataset)
+    avg_loss = total_loss / num_samples
     accuracy = accuracy_score(all_labels, all_preds)
     f1 = f1_score(all_labels, all_preds, average='weighted')
     precision = precision_score(all_labels, all_preds, average='weighted')
@@ -38,31 +36,28 @@ def evaluate_model(model, dataloader, criterion, device='cpu'):
     return avg_loss, accuracy, f1, precision, recall, np.array(all_preds), np.array(all_labels)
 
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device='cpu'):
-    model.train()
-    model.to(device)
-
+def train_one_epoch(model, dataloader, criterion, optimizer):
     total_loss = 0.0
     correct = 0
     total = 0
 
     for inputs, labels in dataloader:
-        inputs, labels = inputs.to(device), labels.to(device)
+        labels = tf.cast(labels, tf.int64)
 
-        optimizer.zero_grad()
+        with tf.GradientTape() as tape:
+            outputs = model(inputs, training=True)
+            loss = criterion(labels, outputs)
 
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-        loss.backward()
-        optimizer.step()
+        total_loss += loss.numpy() * inputs.shape[0]
 
-        total_loss += loss.item() * inputs.size(0)
-        _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        predicted = tf.argmax(outputs, axis=1)
+        total += labels.shape[0]
+        correct += tf.reduce_sum(tf.cast(predicted == labels, tf.int32)).numpy()
 
-    avg_loss = total_loss / len(dataloader.dataset)
+    avg_loss = total_loss / total
     accuracy = correct / total
 
     return avg_loss, accuracy
@@ -144,26 +139,34 @@ def print_classification_report(y_true, y_pred, class_names):
     print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
 
 
-def save_model(model, optimizer, epoch, metrics, save_path):
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
+def save_model(model, epoch, metrics, save_path):
+    weights_path = str(save_path).replace('.pth', '.weights.keras')
+
+    model.save_weights(weights_path)
+
+    metadata = {
+        'epoch': int(epoch),
         'metrics': metrics
     }
 
-    torch.save(checkpoint, save_path)
-    print(f"Model zapisany: {save_path}")
+    metadata_path = str(save_path).replace('.pth', '_metadata.json')
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=4)
+
+    print(f"Model zapisany: {weights_path}")
 
 
-def load_model(model, optimizer, checkpoint_path, device='cpu'):
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+def load_model(model, checkpoint_path):
+    weights_path = str(checkpoint_path).replace('.pth', '.weights.keras')
 
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    model.load_weights(weights_path)
 
-    epoch = checkpoint['epoch']
-    metrics = checkpoint.get('metrics', {})
+    metadata_path = str(checkpoint_path).replace('.pth', '_metadata.json')
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+    epoch = metadata['epoch']
+    metrics = metadata.get('metrics', {})
 
     print(f"Model wczytany z epoki {epoch}")
 

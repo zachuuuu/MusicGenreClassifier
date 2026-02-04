@@ -60,7 +60,8 @@ python -m models.train --model mlp
 ```bash
 python -m models.train --model cnn
 ```
-Wyniki (wykresy, macierze pomyłek, model) zostaną zapisane w folderze models/(mlp/cnn)/reports/
+Wyniki (wykresy, macierze pomyłek, model .weights.h5 + metadata) zostaną zapisane w folderze models/(mlp/cnn)/reports/
+
 
 ### 4. Hyperparameter Tuning (ClearML + Optuna)
 Projekt obsługuje automatyczne poszukiwanie najlepszych parametrów (Learning Rate, Batch Size, Dropout, Architektura sieci). **Wymaga skonfigurowanego konta ClearML (clearml-init).**
@@ -76,7 +77,7 @@ python -m models.tune --model cnn --trials ?
 ```
 
 ## Wykorzystane Technologie i Techniki
-* **PyTorch**: Budowa i trening sieci neuronowych.
+* **TensorFlow/Keras**: Budowa i trening sieci neuronowych.
 * **Librosa**: Przetwarzanie sygnałów audio (MFCC, Mel-Spectrograms).
 * **Scikit-learn**: PCA, skalowanie danych, metryki.
 * **Optuna**: Zaawansowana optymalizacja hiperparametrów (TPE Sampler, Pruning).

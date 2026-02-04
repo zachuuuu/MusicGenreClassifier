@@ -222,3 +222,6 @@ dataset/processed/mel_spectrograms
 *.pth
 runs/
 .optuna/
+Dockerfile
+*.h5
+best_model_metadata.json

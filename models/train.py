@@ -4,10 +4,7 @@ import os
 import time
 import random
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -18,38 +15,34 @@ from models.mlp.mlp_model import MLP
 from models.cnn.cnn_model import CNN
 import models.utils as utils
 
+
 def setup_seed(seed):
-    torch.manual_seed(seed)
+    tf.random.set_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 
-def get_optimizer(model, cfg):
+def get_optimizer(cfg):
     opt_name = cfg['optimizer'].lower()
+    lr = cfg['learning_rate']
+    wd = cfg['weight_decay']
 
     if opt_name == 'adam':
-        return optim.Adam(
-            model.parameters(),
-            lr=cfg['learning_rate'],
-            weight_decay=cfg['weight_decay']
+        return tf.keras.optimizers.Adam(learning_rate=lr)
+    elif opt_name == 'adamw':
+        return tf.keras.optimizers.AdamW(
+            learning_rate=lr,
+            weight_decay=wd
         )
     elif opt_name == 'sgd':
-        return optim.SGD(
-            model.parameters(),
-            lr=cfg['learning_rate'],
-            weight_decay=cfg['weight_decay'],
-            momentum=cfg.get('momentum')
+        return tf.keras.optimizers.SGD(
+            learning_rate=lr,
+            momentum=cfg.get('momentum', 0.9)
         )
     elif opt_name == 'rmsprop':
-        return optim.RMSprop(
-            model.parameters(),
-            lr=cfg['learning_rate'],
-            weight_decay=cfg['weight_decay']
-        )
+        return tf.keras.optimizers.RMSprop(learning_rate=lr)
     else:
-        raise ValueError(f"Nieznany optymalizator: {opt_name}. Wybierz 'adam', 'sgd' lub 'rmsprop'.")
+        raise ValueError(f"Nieznany optymalizator: {opt_name}")
 
 
 def main(model_type):
@@ -67,7 +60,8 @@ def main(model_type):
             input_size=cfg['input_size'],
             hidden_sizes=cfg['hidden_sizes'],
             num_classes=config.NUM_CLASSES,
-            dropout=cfg['dropout']
+            dropout=cfg['dropout'],
+            weight_decay=cfg['weight_decay']
         )
 
     elif model_type == 'cnn':
@@ -84,27 +78,28 @@ def main(model_type):
             num_classes=config.NUM_CLASSES,
             conv_channels=cfg.get('conv_channels'),
             fc_size=cfg.get('fc_size', 256),
-            dropout=cfg['dropout']
+            dropout=cfg['dropout'],
+            weight_decay=cfg['weight_decay']
         )
     else:
         raise ValueError("Model musi być 'mlp' lub 'cnn'")
 
     reports_dir.mkdir(parents=True, exist_ok=True)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Używane urządzenie: {device}")
-    model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = get_optimizer(model, cfg)
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        print(f"Używane urządzenie: GPU ({len(gpus)} device(s) found)")
+        for gpu in gpus:
+            print(f"  └─ {gpu.name}")
+    else:
+        print("Używane urządzenie: CPU (brak GPU)")
+
+    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    optimizer = get_optimizer(cfg)
     print(f"Optimizer: {cfg['optimizer'].upper()} | LR: {cfg['learning_rate']} | Weight Decay: {cfg['weight_decay']}")
 
-    scheduler = ReduceLROnPlateau(
-        optimizer,
-        mode='min',
-        factor=0.5,
-        patience=5,
-        min_lr=1e-6
-    )
+    best_val_loss = float('inf')
+    patience_counter = 0
 
     early_stopping = utils.EarlyStopping(patience=cfg['patience'], mode='min')
 
@@ -115,15 +110,26 @@ def main(model_type):
 
     for epoch in range(1, cfg['epochs'] + 1):
         train_loss, train_acc = utils.train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model, train_loader, criterion, optimizer
         )
 
         val_loss, val_acc, val_f1, val_precision, val_recall, _, _ = utils.evaluate_model(
-            model, val_loader, criterion, device
+            model, val_loader, criterion
         )
 
-        scheduler.step(val_loss)
-        current_lr = optimizer.param_groups[0]['lr']
+        if val_loss < best_val_loss - 1e-4:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= 5:
+                old_lr = optimizer.learning_rate.numpy()
+                new_lr = max(old_lr * 0.5, 1e-6)
+                optimizer.learning_rate.assign(new_lr)
+                print(f"ReduceLROnPlateau: LR zmieniony z {old_lr:.6f} na {new_lr:.6f}")
+                patience_counter = 0
+
+        current_lr = optimizer.learning_rate.numpy()
 
         history['train_loss'].append(train_loss)
         history['val_loss'].append(val_loss)
@@ -136,7 +142,7 @@ def main(model_type):
 
         if early_stopping(val_loss):
             utils.save_model(
-                model, optimizer, epoch,
+                model, epoch,
                 {'val_loss': val_loss, 'val_acc': val_acc},
                 reports_dir / "best_model.pth"
             )
@@ -153,10 +159,10 @@ def main(model_type):
     utils.plot_training_curves(history, save_path=reports_dir / "training_curves.png")
 
     print("\nTestowanie najlepszego modelu na zbiorze testowym...")
-    utils.load_model(model, optimizer, reports_dir / "best_model.pth", device)
+    utils.load_model(model, reports_dir / "best_model.pth")
 
     test_loss, test_acc, test_f1, test_precision, test_recall, test_preds, test_labels = utils.evaluate_model(
-        model, test_loader, criterion, device
+        model, test_loader, criterion
     )
 
     print(f"Test Result -> Loss: {test_loss:.4f} | Acc: {test_acc:.4f} | "
@@ -168,14 +174,14 @@ def main(model_type):
     utils.plot_confusion_matrix(cm, class_names, save_path=reports_dir / "confusion_matrix.png")
 
     final_metrics = {
-        'test_loss': test_loss,
-        'test_accuracy': test_acc,
-        'test_f1': test_f1,
-        'test_precision': test_precision,
-        'test_recall': test_recall,
+        'test_loss': float(test_loss),
+        'test_accuracy': float(test_acc),
+        'test_f1': float(test_f1),
+        'test_precision': float(test_precision),
+        'test_recall': float(test_recall),
         'training_time': total_time,
         'epochs_trained': len(history['train_loss']),
-        'best_val_loss': min(history['val_loss'])
+        'best_val_loss': float(min(history['val_loss']))
     }
     utils.save_metrics(final_metrics, reports_dir / "metrics.json")
 
