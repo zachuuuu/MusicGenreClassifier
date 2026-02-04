@@ -223,5 +223,3 @@ dataset/processed/mel_spectrograms
 runs/
 .optuna/
 Dockerfile
-*.h5
-best_model_metadata.json

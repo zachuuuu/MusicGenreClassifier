@@ -5,7 +5,7 @@ import time
 import random
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -13,6 +13,7 @@ import config
 import performing_data.dataset as ds
 from models.mlp.mlp_model import MLP
 from models.cnn.cnn_model import CNN
+from models.rf.rf_model import RandomForest
 import models.utils as utils
 
 
@@ -60,8 +61,7 @@ def main(model_type):
             input_size=cfg['input_size'],
             hidden_sizes=cfg['hidden_sizes'],
             num_classes=config.NUM_CLASSES,
-            dropout=cfg['dropout'],
-            weight_decay=cfg['weight_decay']
+            dropout=cfg['dropout']
         )
 
     elif model_type == 'cnn':
@@ -78,11 +78,90 @@ def main(model_type):
             num_classes=config.NUM_CLASSES,
             conv_channels=cfg.get('conv_channels'),
             fc_size=cfg.get('fc_size', 256),
-            dropout=cfg['dropout'],
-            weight_decay=cfg['weight_decay']
+            dropout=cfg['dropout']
         )
+
+    elif model_type == 'rf':
+        cfg = config.RF_CONFIG
+        reports_dir = config.RF_REPORTS_DIR
+        print(f"\nRozpoczynam trening modelu RandomForest: {config.PROJECT_NAME}")
+
+        train_data, val_data, test_data, le = ds.prepare_mlp_data(
+            config.FEATURES_FILE, config
+        )
+        class_names = list(le.classes_)
+
+        X_train, y_train = train_data
+        X_val, y_val = val_data
+        X_test, y_test = test_data
+
+        model = RandomForest(
+            n_estimators=cfg['n_estimators'],
+            max_depth=cfg['max_depth'],
+            min_samples_split=cfg['min_samples_split'],
+            min_samples_leaf=cfg['min_samples_leaf'],
+            max_features=cfg['max_features'],
+            random_state=cfg['random_state'],
+            class_weight=cfg.get('class_weight')
+        )
+
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        print("Używane urządzenie: CPU (Random Forest)")
+
+        print(f"\nStart treningu...")
+        start_time = time.time()
+
+        model.fit(X_train, y_train)
+
+        total_time = time.time() - start_time
+        print(f"Trening zakończony w {total_time:.2f}s")
+
+        print("\nEwaluacja na zbiorze walidacyjnym...")
+        val_preds = model.predict(X_val)
+        val_acc = accuracy_score(y_val, val_preds)
+        val_f1 = f1_score(y_val, val_preds, average='weighted')
+        val_precision = precision_score(y_val, val_preds, average='weighted')
+        val_recall = recall_score(y_val, val_preds, average='weighted')
+
+        print(f"Val Result -> Acc: {val_acc:.4f} | F1: {val_f1:.4f} | "
+              f"Precision: {val_precision:.4f} | Recall: {val_recall:.4f}")
+
+        print("\nTestowanie modelu na zbiorze testowym...")
+        test_preds = model.predict(X_test)
+        test_acc = accuracy_score(y_test, test_preds)
+        test_f1 = f1_score(y_test, test_preds, average='weighted')
+        test_precision = precision_score(y_test, test_preds, average='weighted')
+        test_recall = recall_score(y_test, test_preds, average='weighted')
+
+        print(f"Test Result -> Acc: {test_acc:.4f} | F1: {test_f1:.4f} | "
+              f"Precision: {test_precision:.4f} | Recall: {test_recall:.4f}")
+
+        utils.print_classification_report(y_test, test_preds, class_names)
+
+        cm = confusion_matrix(y_test, test_preds)
+        utils.plot_confusion_matrix(cm, class_names, save_path=reports_dir / "confusion_matrix.png")
+
+        final_metrics = {
+            'val_accuracy': float(val_acc),
+            'val_f1': float(val_f1),
+            'val_precision': float(val_precision),
+            'val_recall': float(val_recall),
+            'test_accuracy': float(test_acc),
+            'test_f1': float(test_f1),
+            'test_precision': float(test_precision),
+            'test_recall': float(test_recall),
+            'training_time': total_time,
+            'n_estimators': cfg['n_estimators']
+        }
+        utils.save_metrics(final_metrics, reports_dir / "metrics.json")
+
+        model.save_weights(reports_dir / "best_model.pth")
+
+        print(f"\nWszystkie wyniki zapisano w: {reports_dir}")
+        return
+
     else:
-        raise ValueError("Model musi być 'mlp' lub 'cnn'")
+        raise ValueError("Model musi być 'mlp', 'cnn' lub 'rf'")
 
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,7 +173,7 @@ def main(model_type):
     else:
         print("Używane urządzenie: CPU (brak GPU)")
 
-    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)
     optimizer = get_optimizer(cfg)
     print(f"Optimizer: {cfg['optimizer'].upper()} | LR: {cfg['learning_rate']} | Weight Decay: {cfg['weight_decay']}")
 
@@ -191,6 +270,6 @@ def main(model_type):
 if __name__ == "__main__":
     setup_seed(config.SEED)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, required=True, choices=['mlp', 'cnn'])
+    parser.add_argument("--model", type=str, required=True, choices=['mlp', 'cnn', 'rf'])
     args = parser.parse_args()
     main(args.model)

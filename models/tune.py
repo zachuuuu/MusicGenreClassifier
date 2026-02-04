@@ -53,8 +53,7 @@ def objective(trial, model_type, task):
             input_size=config.MLP_CONFIG['input_size'],
             hidden_sizes=hidden_sizes,
             num_classes=config.NUM_CLASSES,
-            dropout=dropout,
-            weight_decay=weight_decay
+            dropout=dropout
         )
         epochs = config.MLP_CONFIG['epochs']
         patience = config.MLP_CONFIG['patience']
@@ -77,13 +76,12 @@ def objective(trial, model_type, task):
             num_classes=config.NUM_CLASSES,
             conv_channels=conv_channels,
             fc_size=fc_size,
-            dropout=dropout,
-            weight_decay=weight_decay
+            dropout=dropout
         )
         epochs = config.CNN_CONFIG['epochs']
         patience = config.CNN_CONFIG['patience']
 
-    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)
     optimizer = get_optimizer(optimizer_name, learning_rate, weight_decay)
 
     early_stopping = utils.EarlyStopping(patience=patience, mode='min')

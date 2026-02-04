@@ -4,7 +4,7 @@ from tensorflow.keras import layers
 
 
 class CNN(keras.Model):
-    def __init__(self, num_classes, conv_channels=None, fc_size=256, dropout=0.3, weight_decay=0.0):
+    def __init__(self, num_classes, conv_channels=None, fc_size=256, dropout=0.3):
         super(CNN, self).__init__()
 
         if conv_channels is None:
@@ -19,7 +19,7 @@ class CNN(keras.Model):
                     kernel_size=3,
                     padding='same',
                 ),
-                layers.BatchNormalization(),
+                layers.BatchNormalization(epsilon=1e-05, momentum=0.9),
                 layers.ReLU(),
                 layers.MaxPooling2D(pool_size=2, strides=2)
             ])
@@ -33,7 +33,7 @@ class CNN(keras.Model):
         self.relu = layers.ReLU()
         self.dropout_fc = layers.Dropout(dropout)
         self.fc2 = layers.Dense(
-            num_classes
+            num_classes, activation='softmax'
         )
 
     def call(self, x, training=False):

@@ -140,7 +140,7 @@ def print_classification_report(y_true, y_pred, class_names):
 
 
 def save_model(model, epoch, metrics, save_path):
-    weights_path = str(save_path).replace('.pth', '.weights.keras')
+    weights_path = str(save_path).replace('.pth', '.weights.h5')
 
     model.save_weights(weights_path)
 
@@ -157,7 +157,7 @@ def save_model(model, epoch, metrics, save_path):
 
 
 def load_model(model, checkpoint_path):
-    weights_path = str(checkpoint_path).replace('.pth', '.weights.keras')
+    weights_path = str(checkpoint_path).replace('.pth', '.weights.h5')
 
     model.load_weights(weights_path)
 

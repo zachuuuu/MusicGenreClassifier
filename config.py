@@ -7,6 +7,7 @@ SPECTROGRAMS_DIR = DATA_DIR / "mel_spectrograms"
 
 MLP_REPORTS_DIR = BASE_DIR / "models" / "mlp" / "reports"
 CNN_REPORTS_DIR = BASE_DIR / "models" / "cnn" / "reports"
+RF_REPORTS_DIR = BASE_DIR / "models" / "rf" / "reports"
 
 PROJECT_NAME = "MusicGenreClassifier_FDL"
 
@@ -45,4 +46,14 @@ CNN_CONFIG = {
     'weight_decay': 2.19e-06,
     'momentum': 0.9, # dla SGD
     'patience': 10
+}
+
+RF_CONFIG = {
+    'n_estimators': 200,
+    'max_depth': 30,
+    'min_samples_split': 2,
+    'min_samples_leaf': 1,
+    'max_features': 'sqrt',
+    'random_state': SEED,
+    'class_weight': 'balanced'
 }

@@ -3,7 +3,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 
 class MLP(keras.Model):
-    def __init__(self, input_size, hidden_sizes, num_classes, dropout, weight_decay=0.0):
+    def __init__(self, input_size, hidden_sizes, num_classes, dropout):
         super(MLP, self).__init__()
 
         model_layers = []
@@ -25,7 +25,7 @@ class MLP(keras.Model):
             model_layers.append(layers.Dropout(dropout))
 
         model_layers.append(layers.Dense(
-            num_classes,
+            num_classes, activation='softmax'
         ))
 
         self.network = keras.Sequential(model_layers)
