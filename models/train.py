@@ -155,7 +155,7 @@ def main(model_type):
         }
         utils.save_metrics(final_metrics, reports_dir / "metrics.json")
 
-        model.save_weights(reports_dir / "best_model.pth")
+        model.save_weights(reports_dir / "best_model.pkl")
 
         print(f"\nWszystkie wyniki zapisano w: {reports_dir}")
         return
@@ -173,76 +173,73 @@ def main(model_type):
     else:
         print("Używane urządzenie: CPU (brak GPU)")
 
-    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)
     optimizer = get_optimizer(cfg)
     print(f"Optimizer: {cfg['optimizer'].upper()} | LR: {cfg['learning_rate']} | Weight Decay: {cfg['weight_decay']}")
 
-    best_val_loss = float('inf')
-    patience_counter = 0
+    model.compile(
+        optimizer=optimizer,
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
-    early_stopping = utils.EarlyStopping(patience=cfg['patience'], mode='min')
-
-    history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=cfg['patience'],
+            restore_best_weights=True,
+            verbose=0
+        ),
+        tf.keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=5,
+            min_lr=1e-6,
+            verbose=0
+        ),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=str(reports_dir / "best_model.weights.h5"),
+            monitor='val_loss',
+            save_best_only=True,
+            save_weights_only=True,
+            verbose=0
+        ),
+        utils.TrainingCallback(cfg['epochs'], val_loader)
+    ]
 
     print(f"\nStart treningu ({cfg['epochs']} epok)...")
     start_time = time.time()
 
-    for epoch in range(1, cfg['epochs'] + 1):
-        train_loss, train_acc = utils.train_one_epoch(
-            model, train_loader, criterion, optimizer
-        )
-
-        val_loss, val_acc, val_f1, val_precision, val_recall, _, _ = utils.evaluate_model(
-            model, val_loader, criterion
-        )
-
-        if val_loss < best_val_loss - 1e-4:
-            best_val_loss = val_loss
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter >= 5:
-                old_lr = optimizer.learning_rate.numpy()
-                new_lr = max(old_lr * 0.5, 1e-6)
-                optimizer.learning_rate.assign(new_lr)
-                print(f"ReduceLROnPlateau: LR zmieniony z {old_lr:.6f} na {new_lr:.6f}")
-                patience_counter = 0
-
-        current_lr = optimizer.learning_rate.numpy()
-
-        history['train_loss'].append(train_loss)
-        history['val_loss'].append(val_loss)
-        history['train_acc'].append(train_acc)
-        history['val_acc'].append(val_acc)
-
-        print(f"Epoch {epoch}/{cfg['epochs']} | LR: {current_lr:.6f} | "
-              f"Train Loss: {train_loss:.4f} Acc: {train_acc:.4f} | "
-              f"Val Loss: {val_loss:.4f} Acc: {val_acc:.4f} F1: {val_f1:.4f}")
-
-        if early_stopping(val_loss):
-            utils.save_model(
-                model, epoch,
-                {'val_loss': val_loss, 'val_acc': val_acc},
-                reports_dir / "best_model.pth"
-            )
-
-        if early_stopping.early_stop:
-            print(f"\nEarly Stopping zadziałał w epoce {epoch}!")
-            break
+    history = model.fit(
+        train_loader,
+        validation_data=val_loader,
+        epochs=cfg['epochs'],
+        callbacks=callbacks,
+        verbose=0
+    )
 
     total_time = time.time() - start_time
     print(f"\nTrening zakończony w {total_time:.2f}s")
 
+    history_dict = {
+        'train_loss': history.history['loss'],
+        'val_loss': history.history['val_loss'],
+        'train_acc': history.history['accuracy'],
+        'val_acc': history.history['val_accuracy']
+    }
+
     print("\nGenerowanie raportów...")
 
-    utils.plot_training_curves(history, save_path=reports_dir / "training_curves.png")
+    utils.plot_training_curves(history_dict, save_path=reports_dir / "training_curves.png")
 
     print("\nTestowanie najlepszego modelu na zbiorze testowym...")
-    utils.load_model(model, reports_dir / "best_model.pth")
 
-    test_loss, test_acc, test_f1, test_precision, test_recall, test_preds, test_labels = utils.evaluate_model(
-        model, test_loader, criterion
-    )
+    test_loss, test_acc = model.evaluate(test_loader, verbose=0)
+
+    test_preds, test_labels = utils.get_predictions_and_labels(model, test_loader)
+
+    test_f1 = f1_score(test_labels, test_preds, average='weighted')
+    test_precision = precision_score(test_labels, test_preds, average='weighted')
+    test_recall = recall_score(test_labels, test_preds, average='weighted')
 
     print(f"Test Result -> Loss: {test_loss:.4f} | Acc: {test_acc:.4f} | "
           f"F1: {test_f1:.4f} | Precision: {test_precision:.4f} | Recall: {test_recall:.4f}")
@@ -259,8 +256,8 @@ def main(model_type):
         'test_precision': float(test_precision),
         'test_recall': float(test_recall),
         'training_time': total_time,
-        'epochs_trained': len(history['train_loss']),
-        'best_val_loss': float(min(history['val_loss']))
+        'epochs_trained': len(history_dict['train_loss']),
+        'best_val_loss': float(min(history_dict['val_loss']))
     }
     utils.save_metrics(final_metrics, reports_dir / "metrics.json")
 

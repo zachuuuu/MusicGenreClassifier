@@ -2,65 +2,52 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, classification_report
+from sklearn.metrics import classification_report, f1_score
 import json
 from pathlib import Path
 
 
-def evaluate_model(model, dataloader, criterion):
-    total_loss = 0.0
+class TrainingCallback(tf.keras.callbacks.Callback):
+    def __init__(self, total_epochs, val_loader):
+        super().__init__()
+        self.total_epochs = total_epochs
+        self.val_loader = val_loader
+
+    def on_epoch_end(self, epoch, logs=None):
+        epoch_num = epoch + 1
+        train_loss = logs.get('loss', 0)
+        train_acc = logs.get('accuracy', 0)
+        val_loss = logs.get('val_loss', 0)
+        val_acc = logs.get('val_accuracy', 0)
+        current_lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+
+        val_preds = []
+        val_labels = []
+        for x, y in self.val_loader:
+            preds = self.model(x, training=False)
+            val_preds.extend(tf.argmax(preds, axis=1).numpy())
+            val_labels.extend(y.numpy())
+
+        val_f1 = f1_score(val_labels, val_preds, average='weighted')
+
+        print(f"Epoch {epoch_num}/{self.total_epochs} | LR: {current_lr:.6f} | "
+              f"Train Loss: {train_loss:.4f} Acc: {train_acc:.4f} | "
+              f"Val Loss: {val_loss:.4f} Acc: {val_acc:.4f} F1: {val_f1:.4f}")
+
+
+
+def get_predictions_and_labels(model, dataloader):
     all_preds = []
     all_labels = []
 
-    num_samples = 0
-
     for inputs, labels in dataloader:
-        labels = tf.cast(labels, tf.int64)
         outputs = model(inputs, training=False)
-        loss = criterion(labels, outputs)
-
-        total_loss += loss.numpy() * inputs.shape[0]
-        num_samples += inputs.shape[0]
-
         predicted = tf.argmax(outputs, axis=1).numpy()
 
         all_preds.extend(predicted)
         all_labels.extend(labels.numpy())
 
-    avg_loss = total_loss / num_samples
-    accuracy = accuracy_score(all_labels, all_preds)
-    f1 = f1_score(all_labels, all_preds, average='weighted')
-    precision = precision_score(all_labels, all_preds, average='weighted')
-    recall = recall_score(all_labels, all_preds, average='weighted')
-
-    return avg_loss, accuracy, f1, precision, recall, np.array(all_preds), np.array(all_labels)
-
-
-def train_one_epoch(model, dataloader, criterion, optimizer):
-    total_loss = 0.0
-    correct = 0
-    total = 0
-
-    for inputs, labels in dataloader:
-        labels = tf.cast(labels, tf.int64)
-
-        with tf.GradientTape() as tape:
-            outputs = model(inputs, training=True)
-            loss = criterion(labels, outputs)
-
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-
-        total_loss += loss.numpy() * inputs.shape[0]
-
-        predicted = tf.argmax(outputs, axis=1)
-        total += labels.shape[0]
-        correct += tf.reduce_sum(tf.cast(predicted == labels, tf.int32)).numpy()
-
-    avg_loss = total_loss / total
-    accuracy = correct / total
-
-    return avg_loss, accuracy
+    return np.array(all_preds), np.array(all_labels)
 
 
 def plot_training_curves(history, save_path=None):
@@ -137,67 +124,3 @@ def print_classification_report(y_true, y_pred, class_names):
     print("CLASSIFICATION REPORT")
     print("=" * 60)
     print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
-
-
-def save_model(model, epoch, metrics, save_path):
-    weights_path = str(save_path).replace('.pth', '.weights.h5')
-
-    model.save_weights(weights_path)
-
-    metadata = {
-        'epoch': int(epoch),
-        'metrics': metrics
-    }
-
-    metadata_path = str(save_path).replace('.pth', '_metadata.json')
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=4)
-
-    print(f"Model zapisany: {weights_path}")
-
-
-def load_model(model, checkpoint_path):
-    weights_path = str(checkpoint_path).replace('.pth', '.weights.h5')
-
-    model.load_weights(weights_path)
-
-    metadata_path = str(checkpoint_path).replace('.pth', '_metadata.json')
-    with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
-
-    epoch = metadata['epoch']
-    metrics = metadata.get('metrics', {})
-
-    print(f"Model wczytany z epoki {epoch}")
-
-    return epoch, metrics
-
-
-class EarlyStopping:
-    def __init__(self, patience=10, min_delta=0.0, mode='min'):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.counter = 0
-        self.best_value = None
-        self.early_stop = False
-
-    def __call__(self, current_value):
-        if self.best_value is None:
-            self.best_value = current_value
-            return True
-
-        if self.mode == 'min':
-            improvement = self.best_value - current_value > self.min_delta
-        else:
-            improvement = current_value - self.best_value > self.min_delta
-
-        if improvement:
-            self.best_value = current_value
-            self.counter = 0
-            return True
-        else:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
-            return False

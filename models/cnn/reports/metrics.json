@@ -1,10 +1,10 @@
 {
-    "test_loss": 0.6338327813148499,
-    "test_accuracy": 0.86,
-    "test_f1": 0.8547498098860725,
-    "test_precision": 0.8567695947843007,
-    "test_recall": 0.86,
-    "training_time": 478.8736729621887,
+    "test_loss": 0.6308289766311646,
+    "test_accuracy": 0.846666693687439,
+    "test_f1": 0.8408157496213668,
+    "test_precision": 0.8434940794499618,
+    "test_recall": 0.8466666666666667,
+    "training_time": 465.46212553977966,
     "epochs_trained": 100,
-    "best_val_loss": 0.4971682461102804
+    "best_val_loss": 0.468779593706131
 }

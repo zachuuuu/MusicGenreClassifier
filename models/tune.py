@@ -11,7 +11,6 @@ import config
 import performing_data.dataset as ds
 from models.mlp.mlp_model import MLP
 from models.cnn.cnn_model import CNN
-import models.utils as utils
 
 
 def get_optimizer(optimizer_name, lr, weight_decay):
@@ -27,6 +26,32 @@ def get_optimizer(optimizer_name, lr, weight_decay):
     else:
         raise ValueError(f"Unknown optimizer: {optimizer_name}")
 
+
+class OptunaPruningCallback(tf.keras.callbacks.Callback):
+    def __init__(self, trial, task):
+        super().__init__()
+        self.trial = trial
+        self.task = task
+
+    def on_epoch_end(self, epoch, logs=None):
+        val_loss = logs.get('val_loss')
+        val_acc = logs.get('val_accuracy')
+        train_loss = logs.get('loss')
+
+        self.trial.report(val_loss, epoch + 1)
+
+        if self.task:
+            logger = self.task.get_logger()
+            logger.report_scalar('Loss', 'train', float(train_loss), iteration=epoch + 1)
+            logger.report_scalar('Loss', 'val', float(val_loss), iteration=epoch + 1)
+            logger.report_scalar('Accuracy', 'val', float(val_acc), iteration=epoch + 1)
+
+        print(f"Trial {self.trial.number} | Ep {epoch + 1} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
+
+        if self.trial.should_prune():
+            print(f"Trial {self.trial.number} pruned at epoch {epoch + 1}.")
+            self.model.stop_training = True
+            raise optuna.TrialPruned()
 
 
 def objective(trial, model_type, task):
@@ -81,49 +106,41 @@ def objective(trial, model_type, task):
         epochs = config.CNN_CONFIG['epochs']
         patience = config.CNN_CONFIG['patience']
 
-    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)
     optimizer = get_optimizer(optimizer_name, learning_rate, weight_decay)
 
-    early_stopping = utils.EarlyStopping(patience=patience, mode='min')
-
-    best_val_loss = float('inf')
+    model.compile(
+        optimizer=optimizer,
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
     print(f"\n--- Trial {trial.number} Start: LR={learning_rate:.5f}, Batch={batch_size}, Opt={optimizer_name} ---")
 
-    for epoch in range(1, epochs + 1):
-        train_loss, train_acc = utils.train_one_epoch(
-            model, train_loader, criterion, optimizer
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=patience,
+            restore_best_weights=True,
+            verbose=0
+        ),
+        OptunaPruningCallback(trial, task)
+    ]
+
+    try:
+        history = model.fit(
+            train_loader,
+            validation_data=val_loader,
+            epochs=epochs,
+            callbacks=callbacks,
+            verbose=0
         )
 
-        val_loss, val_acc, val_f1, val_prec, val_rec, _, _ = utils.evaluate_model(
-            model, val_loader, criterion
-        )
+        best_val_loss = min(history.history['val_loss'])
 
-        if task:
-            logger = task.get_logger()
-            logger.report_scalar('Loss', 'train', float(train_loss), iteration=epoch)
-            logger.report_scalar('Loss', 'val', float(val_loss), iteration=epoch)
-            logger.report_scalar('Accuracy', 'val', float(val_acc), iteration=epoch)
-            logger.report_scalar('F1 Score', 'val', float(val_f1), iteration=epoch)
+        return best_val_loss
 
-        trial.report(val_loss, epoch)
-
-        print(f"Trial {trial.number} | Ep {epoch} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
-
-        if trial.should_prune():
-            print(f"Trial {trial.number} pruned at epoch {epoch}.")
-            raise optuna.TrialPruned()
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-
-        early_stopping(val_loss)
-
-        if early_stopping.early_stop:
-            print(f"Trial {trial.number} Early Stopping at epoch {epoch}")
-            break
-
-    return best_val_loss
+    except optuna.TrialPruned:
+        raise
 
 
 def run_optimization(model_type, n_trials=20):

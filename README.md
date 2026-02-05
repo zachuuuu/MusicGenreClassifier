@@ -87,24 +87,24 @@ Optymalna architektura (dynamicznie dobierane warstwy konwolucyjne) i hiperparam
 
 | Model | Test Accuracy | F1-Score | Precision | Recall | Czas Treningu |
 |-------|---------------|----------|-----------|--------|---------------|
-| **CNN**  | **86.00%** | **85.47%** | **85.68%** | **86.00%** | 478.87s |
-| **MLP**  | **64.00%** | **63.09%** | **64.53%** | **64.00%** | 40.85s |
-| **RF**  | **61.33%** | **60.85%** | **61.53%** | **61.33%** | ~0.5s |
+| **CNN** | **84.67%** | **84.08%** | **84.35%** | **84.67%** | 465.46s |
+| **MLP** | **66.67%** | **65.77%** | **66.44%** | **66.67%** | 15.91s |
+| **RF** | **61.33%** | **60.85%** | **61.53%** | **61.33%** | ~0.5s |
 
-**CNN osiągnął najlepszy wynik** dzięki uczeniu przestrzennych wzorców z mel-spektrogramów.
+**CNN osiągnął najlepszy wynik** dzięki uczeniu przestrzennych wzorców z mel-spektrogramów. Warto zauważyć znaczną poprawę wydajności modelu MLP po migracji na TensorFlow.
 
 ## Porównanie każdej klasy (CNN - Najlepszy Model)
 
 | Gatunek | Precision | Recall | F1-Score |
 |---------|-----------|--------|----------|
-| Blues | 88.2% | 100.0% | 93.8% |
+| Blues | 87.5% | 93.3% | 90.3% |
 | Classical | 93.3% | 93.3% | 93.3% |
 | Country | 78.6% | 73.3% | 75.9% |
-| Disco | 84.6% | 73.3% | 78.6% |
-| Hip-hop | 86.7% | 86.7% | 86.7% |
-| Jazz | 88.2% | 100.0% | 93.8% |
-| Metal | 93.8% | 100.0% | 96.8% |
-| Pop | 77.8% | 93.3% | 84.9% |
+| Disco | 83.3% | 66.7% | 74.1% |
+| Hip-hop | 81.2% | 86.7% | 83.9% |
+| Jazz | 83.3% | 100.0% | 90.9% |
+| Metal | 88.2% | 100.0% | 93.8% |
+| Pop | 82.4% | 93.3% | 87.5% |
 | Reggae | 92.9% | 86.7% | 89.7% |
 | Rock | 72.7% | 53.3% | 61.5% |
 
@@ -142,7 +142,8 @@ python -m models.train --model mlp
 ```bash
 python -m models.train --model cnn
 ```
-Wyniki (wykresy, macierze pomyłek, model .weights.h5 + metadata) zostaną zapisane w folderze models/(mlp/cnn/rf)/reports/
+Wyniki (wykresy, macierze pomyłek, model .weights.h5 dla MLP/CNN lub .pkl dla RF) zostaną zapisane w folderze models/(mlp/cnn/rf)/reports/
+
 
 
 ### 4. Hyperparameter Tuning (ClearML + Optuna)
