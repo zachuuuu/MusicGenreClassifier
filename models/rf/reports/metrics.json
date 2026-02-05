@@ -7,6 +7,6 @@
     "test_f1": 0.6084700829934094,
     "test_precision": 0.6152680944786207,
     "test_recall": 0.6133333333333333,
-    "training_time": 0.46945714950561523,
+    "training_time": 0.4736177921295166,
     "n_estimators": 200
 }

@@ -6,6 +6,7 @@ from tqdm import tqdm
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+import joblib
 
 SAMPLE_RATE = 22050
 DURATION = 30
@@ -79,6 +80,9 @@ class MLPPreprocessor:
         print(f"Nakładanie PCA (redukcja do {self.n_components} komponentów)...")
         pca = PCA(n_components=self.n_components)
         X_pca = pca.fit_transform(X_scaled)
+
+        joblib.dump(scaler, PROCESSED_DIR / "scaler.pkl")
+        joblib.dump(pca, PROCESSED_DIR / "pca.pkl")
 
         print(f"Zachowana wariancja: {np.sum(pca.explained_variance_ratio_):.2%}")
 

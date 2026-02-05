@@ -32,12 +32,12 @@ class RandomForest:
         return self.model.predict_proba(X)
 
     def save_weights(self, filepath):
-        filepath = str(filepath).replace('.h5', '.pkl').replace('.keras', '.pkl')
+        filepath = str(filepath).replace('.h5', '.pkl').replace('.keras', '.pkl').replace('.pth', '.pkl')
         joblib.dump(self.model, filepath)
         print(f"Model zapisany: {filepath}")
 
     def load_weights(self, filepath):
-        filepath = str(filepath).replace('.h5', '.pkl').replace('.keras', '.pkl')
+        filepath = str(filepath).replace('.h5', '.pkl').replace('.keras', '.pkl').replace('.pth', '.pkl')
         self.model = joblib.load(filepath)
         self._is_trained = True
         print(f"Model wczytany: {filepath}")

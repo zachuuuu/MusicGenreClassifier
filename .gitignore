@@ -219,7 +219,7 @@ __marimo__/
 .DS_Store
 dataset/raw/
 dataset/processed/mel_spectrograms
-*.pth
+*.pkl
 runs/
 .optuna/
 Dockerfile

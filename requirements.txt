@@ -8,3 +8,6 @@ seaborn
 matplotlib
 clearml
 optuna
+fastapi
+uvicorn[standard]
+python-multipart
